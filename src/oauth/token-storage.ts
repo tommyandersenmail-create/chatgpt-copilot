@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as crypto from "crypto";
 import { ALL_OAUTH_PROVIDERS, OAuthProviderType, OAuthToken } from "./types";
 
 const TOKEN_KEY_PREFIX = "oauth-token-";
@@ -12,6 +13,51 @@ const SHARED_TOKEN_DIR = path.join(os.homedir(), ".chatgpt-copilot");
 const SHARED_TOKEN_FILE = path.join(SHARED_TOKEN_DIR, "oauth-tokens.json");
 
 let secretStorage: vscode.SecretStorage | null = null;
+
+// Derive a consistent encryption key from the user's home directory
+function getEncryptionKey(): Buffer {
+  // Use home directory path + a salt to derive a key
+  // This ensures the same user always gets the same key
+  const homeDir = os.homedir();
+  const salt = "chatgpt-copilot-oauth-v1";
+  const key = crypto
+    .pbkdf2Sync(homeDir, salt, 100000, 32, "sha256");
+  return key;
+}
+
+// Encrypt sensitive data with AES-256-GCM
+function encryptData(data: string): string {
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  
+  let encrypted = cipher.update(data, "utf-8", "hex");
+  encrypted += cipher.final("hex");
+  
+  const authTag = cipher.getAuthTag();
+  // Format: iv.authTag.encryptedData (all hex-encoded)
+  return `${iv.toString("hex")}.${authTag.toString("hex")}.${encrypted}`;
+}
+
+// Decrypt data encrypted with encryptData
+function decryptData(encryptedData: string): string {
+  const key = getEncryptionKey();
+  const [ivHex, authTagHex, dataHex] = encryptedData.split(".");
+  
+  if (!ivHex || !authTagHex || !dataHex) {
+    throw new Error("Invalid encrypted data format");
+  }
+  
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  
+  let decrypted = decipher.update(dataHex, "hex", "utf-8");
+  decrypted += decipher.final("utf-8");
+  
+  return decrypted;
+}
 
 export function initializeTokenStorage(context: vscode.ExtensionContext): void {
   secretStorage = context.secrets;
@@ -37,7 +83,22 @@ function loadSharedTokens(): SharedTokens {
   try {
     if (fs.existsSync(SHARED_TOKEN_FILE)) {
       const data = fs.readFileSync(SHARED_TOKEN_FILE, "utf-8");
-      return JSON.parse(data);
+      try {
+        // Try to decrypt the data (new format)
+        const decrypted = decryptData(data);
+        return JSON.parse(decrypted);
+      } catch {
+        // If decryption fails, assume old plaintext format and re-encrypt
+        try {
+          const tokens = JSON.parse(data);
+          // Re-save in encrypted format
+          saveSharedTokens(tokens);
+          return tokens;
+        } catch {
+          // Invalid JSON, return empty
+          return {};
+        }
+      }
     }
   } catch (err) {
     console.error("Failed to load shared tokens:", err);
@@ -48,7 +109,9 @@ function loadSharedTokens(): SharedTokens {
 function saveSharedTokens(tokens: SharedTokens): void {
   try {
     ensureSharedTokenDir();
-    fs.writeFileSync(SHARED_TOKEN_FILE, JSON.stringify(tokens, null, 2), {
+    // Encrypt tokens before writing to disk
+    const encryptedData = encryptData(JSON.stringify(tokens, null, 2));
+    fs.writeFileSync(SHARED_TOKEN_FILE, encryptedData, {
       mode: 0o600,
     });
   } catch (err) {

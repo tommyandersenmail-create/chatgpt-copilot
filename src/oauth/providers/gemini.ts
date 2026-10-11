@@ -13,7 +13,6 @@ import {
 
 const CLIENT_ID =
   "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
-const CLIENT_SECRET = "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";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v1/userinfo"; // v1 endpoint like Python
@@ -70,7 +69,6 @@ export class GeminiOAuthProvider implements OAuthProvider {
       },
       body: new URLSearchParams({
         client_id: this.config.clientId,
-        client_secret: CLIENT_SECRET,
         code,
         code_verifier: verifier,
         grant_type: "authorization_code",
@@ -103,7 +101,6 @@ export class GeminiOAuthProvider implements OAuthProvider {
       },
       body: new URLSearchParams({
         client_id: this.config.clientId,
-        client_secret: CLIENT_SECRET,
         refresh_token: refreshToken,
         grant_type: "refresh_token",
       }),
