@@ -13,7 +13,6 @@ import {
 
 const CLIENT_ID =
   "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
-const CLIENT_SECRET = "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";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v1/userinfo";
@@ -51,7 +50,6 @@ export function generatePKCEChallenge(): PKCEChallenge {
 
 export const antigravityOAuthConfig: OAuthProviderConfig = {
   clientId: CLIENT_ID,
-  clientSecret: CLIENT_SECRET,
   authUrl: AUTH_URL,
   tokenEndpoint: TOKEN_ENDPOINT,
   redirectUri: `http://localhost:${OAUTH_CALLBACK_PORT}/oauth-callback`,
@@ -231,9 +229,6 @@ export class AntigravityOAuthProvider implements OAuthProvider {
       grant_type: "authorization_code",
       redirect_uri: this.config.redirectUri,
     };
-    if (this.config.clientSecret) {
-      params.client_secret = this.config.clientSecret;
-    }
 
     const response = await fetch(this.config.tokenEndpoint, {
       method: "POST",
@@ -268,9 +263,6 @@ export class AntigravityOAuthProvider implements OAuthProvider {
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     };
-    if (this.config.clientSecret) {
-      params.client_secret = this.config.clientSecret;
-    }
 
     const response = await fetch(this.config.tokenEndpoint, {
       method: "POST",
